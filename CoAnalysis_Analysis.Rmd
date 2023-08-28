@@ -1,0 +1,513 @@
+---
+title: "Co-Analysis Analysis"
+output: html_notebook
+---
+```{r}
+library(GGIR)
+library(table1)
+library(tidyr)
+library(dplyr)
+library(haven)
+library(lubridate)
+library(tidyverse)
+library(stringr)
+library(stringi)
+library(data.table)
+```
+
+# Actigraph Datasets Cleaned 
+```{r}
+sum_day_raw <- read_csv("/Users/katefreeman/Desktop/Lab/Sleep/SleepResults/SleepCoAnalysis/output_SleepData/results/part5_daysummary_WW_L30M100V400_T5A5.csv")
+sum_night_raw <- read_csv("/Users/katefreeman/Desktop/Lab/Sleep/SleepResults/SleepCoAnalysis/output_SleepData/results/part4_nightsummary_sleep_cleaned.csv")
+sum_pairs_raw <- read_csv("/Users/katefreeman/Desktop/Lab/Sleep/SleepResults/SleepCoAnalysis/household_co_analysis/summary_pairs/pairwise_summary_all_housholds.csv")
+```
+
+## Night ID Cleaned 
+```{r}
+sum_night <- sum_night_raw %>% 
+  # Subject_ID From File Name ID
+  mutate(Subject_ID_f = str_sub(filename,1,12)) %>%
+  separate(Subject_ID_f, into = c("Site_f", "FamID_f", "ID_f", remove = FALSE)) %>%
+  mutate(FamID_f = if_else(str_length(FamID_f)<4 & str_length(FamID_f)>0, str_pad(FamID_f, 4, pad="0", side="left"), FamID_f)) %>%
+   mutate(ID_f= toupper(ID_f)) %>%
+  mutate(ID_f = if_else(str_length(ID_f)<3 & !grepl("M", ID_f) & !grepl("F", ID_f), str_pad(ID_f, 3, pad="0", side="left"), ID_f)) %>%
+  mutate(Subject_ID_f=str_c(Site_f, FamID_f, ID_f)) %>%
+  mutate(Subject_ID_f = as.character(Subject_ID_f)) %>%
+  
+  # Editing ID's to be consistent with digits and format
+  mutate(ID = str_replace_all(ID, "800", "")) %>%
+  separate(ID, into = c("FamID", "IID"), sep= "\\-(?!.*-)", remove = FALSE) %>% 
+  mutate(FamID = str_replace_all(FamID, "-", "")) %>%
+  mutate(FamID = if_else(str_length(FamID)<4 & str_length(FamID)>0, str_pad(FamID, 4, pad="0", side="left"), FamID)) %>%
+ mutate(FamID_only = if_else(str_length(FamID)>4,str_sub(FamID,1,4), FamID)) %>%
+  mutate(FamID_only = str_replace_all(FamID_only, "F", ""))  %>%
+  mutate(FamID_only = str_replace_all(FamID_only, "M", "")) %>%
+  mutate(FamID_only = if_else(str_length(FamID_only)<4 & str_length(FamID_only)>0, str_pad(FamID_only, 4, pad="0", side="left"), FamID_only)) %>%
+  mutate(FamID_only = ifelse(FamID_only=="", NA, FamID_only)) %>%
+  mutate(FamID_only = ifelse(is.na(FamID_only), str_sub(IID, 1,4), FamID_only)) %>%
+    relocate(FamID_only, .before = FamID) %>%
+ mutate(FamID_only= toupper(FamID_only)) %>%
+   mutate(IID= toupper(IID)) %>%
+  mutate(IID = if_else(str_length(IID)<3 & !grepl("M", IID) & !grepl("F", IID), str_pad(IID, 3, pad="0", side="left"), IID)) %>%
+  
+  
+  mutate(IID_only= if_else(str_length(IID)>4 & grep("M", IID)| 
+                           str_length(IID)>4 & grep("F", IID),
+                           str_sub(IID,-2,-1), IID)) %>%
+    mutate(IID_only = ifelse(is.na(IID_only), FamID, IID_only)) %>%
+  mutate(IID_only= if_else(str_length(IID_only)<6 & str_length(IID_only)>3, str_pad(IID_only, 6, pad="0", side="left"), IID_only)) %>%
+  mutate(IID_only = ifelse(str_length(IID_only)>3, str_sub(IID_only, 5, -1), IID_only)) %>%
+  relocate(IID_only, .before = IID) %>%
+  mutate(id=str_c("800",FamID_only, IID_only)) %>%
+    relocate(id, .before = ID) %>%
+  relocate(Subject_ID_f, .before = ID) %>%
+  relocate (filename, .after = ID) %>%
+  mutate(ID_correct = if_else(Subject_ID_f==id, TRUE, FALSE)) %>%
+  relocate(ID_correct, .before = ID) %>%
+  select(-ID,-filename,-FamID_only,-FamID,-IID_only,-IID)
+```
+## Day ID Cleaned
+```{r}
+sum_day <- sum_day_raw %>% 
+  # Subject_ID From File Name ID
+  mutate(Subject_ID_f = str_sub(filename,1,12)) %>%
+  separate(Subject_ID_f, into = c("Site_f", "FamID_f", "ID_f", remove = FALSE)) %>%
+  mutate(FamID_f = if_else(str_length(FamID_f)<4 & str_length(FamID_f)>0, str_pad(FamID_f, 4, pad="0", side="left"), FamID_f)) %>%
+   mutate(ID_f= toupper(ID_f)) %>%
+  mutate(ID_f = if_else(str_length(ID_f)<3 & !grepl("M", ID_f) & !grepl("F", ID_f), str_pad(ID_f, 3, pad="0", side="left"), ID_f)) %>%
+  mutate(Subject_ID_f=str_c(Site_f, FamID_f, ID_f)) %>%
+  mutate(Subject_ID_f = as.character(Subject_ID_f)) %>%
+  
+  # Editing ID's to be consistent with digits and format
+  mutate(ID = str_replace_all(ID, "800", "")) %>%
+  separate(ID, into = c("FamID", "IID"), sep= "\\-(?!.*-)", remove = FALSE) %>% 
+  mutate(FamID = str_replace_all(FamID, "-", "")) %>%
+  mutate(FamID = if_else(str_length(FamID)<4 & str_length(FamID)>0, str_pad(FamID, 4, pad="0", side="left"), FamID)) %>%
+ mutate(FamID_only = if_else(str_length(FamID)>4,str_sub(FamID,1,4), FamID)) %>%
+  mutate(FamID_only = str_replace_all(FamID_only, "F", ""))  %>%
+  mutate(FamID_only = str_replace_all(FamID_only, "M", "")) %>%
+  mutate(FamID_only = if_else(str_length(FamID_only)<4 & str_length(FamID_only)>0, str_pad(FamID_only, 4, pad="0", side="left"), FamID_only)) %>%
+  mutate(FamID_only = ifelse(FamID_only=="", NA, FamID_only)) %>%
+  mutate(FamID_only = ifelse(is.na(FamID_only), str_sub(IID, 1,4), FamID_only)) %>%
+    relocate(FamID_only, .before = FamID) %>%
+ mutate(FamID_only= toupper(FamID_only)) %>%
+   mutate(IID= toupper(IID)) %>%
+  mutate(IID = if_else(str_length(IID)<3 & !grepl("M", IID) & !grepl("F", IID), str_pad(IID, 3, pad="0", side="left"), IID)) %>%
+  
+  
+  mutate(IID_only= if_else(str_length(IID)>4 & grep("M", IID)| 
+                           str_length(IID)>4 & grep("F", IID),
+                           str_sub(IID,-2,-1), IID)) %>%
+    mutate(IID_only = ifelse(is.na(IID_only), FamID, IID_only)) %>%
+  mutate(IID_only= if_else(str_length(IID_only)<6 & str_length(IID_only)>3, str_pad(IID_only, 6, pad="0", side="left"), IID_only)) %>%
+  mutate(IID_only = ifelse(str_length(IID_only)>3, str_sub(IID_only, 5, -1), IID_only)) %>%
+  relocate(IID_only, .before = IID) %>%
+  mutate(id=str_c("800",FamID_only, IID_only)) %>%
+    relocate(id, .before = ID) %>%
+  relocate(Subject_ID_f, .before = ID) %>%
+  relocate (filename, .after = ID) %>%
+  mutate(ID_correct = if_else(Subject_ID_f==id, TRUE, FALSE)) %>%
+  relocate(ID_correct, .before = ID) %>%
+  select(-ID,-filename,-FamID_only,-FamID,-IID_only,-IID)
+```
+List of Problematic IDs and their Filename ID from Day & Night Summaries
+
+8000244452 8000244M1
+NA 8000244452
+	
+8000019F1 8000019M1 (I believe this is the M2 Family)
+	
+8000039069 8000039M1
+8000039M1 8000039065
+
+## Pair ID Cleaned
+```{r}
+sum_pairs <- sum_pairs_raw %>% mutate(fid= str_pad(HID, 4, pad="0", side="left")) %>%  relocate(fid, .before = Npairs) %>% mutate(MID1=toupper(MID1)) %>% mutate(MID2=toupper(MID2)) %>% mutate(iid1=str_c("800",fid, MID1)) %>% mutate(iid2=str_c("800",fid, MID2)) %>% relocate(iid2, .after = MID2) %>% relocate(iid1, .after = MID2)
+```
+
+### FORBOW ANALYTIC MOST INFO
+- parent data starts at  column 7784
+
+0 : No diagnosis
+1 : Schizophrenia
+2 : Bipolar I
+3 : Bipolar II
+4 : Major depression
+5 : Anxiety
+6 : Eating disorder
+7 : Substance use
+8 : Disruptive
+98 : Other
+99 : No response
+
+```{r}
+FORBOW_analytic_full <- read_dta("/Users/katefreeman/Downloads/FORBOW-analytic-20230816.dta")
+
+FORBOW_full <-read_dta("/Users/katefreeman/Downloads/20230816_FORBOW.dta")
+```
+
+
+
+```{r}
+FORBOW_analytic <- FORBOW_analytic_full %>% select(Subject_ID, Subject_ID_Mother,
+Subject_ID_Father, Assessment_Date, Child_DOB_ChDem,
+oage,
+mdob,
+mage,
+fdob,
+fage, 
+Status_ALS, 
+Status_MFQ,
+Status_MFQ_P,
+Status_CBCL_Parent,
+Status_CBCL_YSR ,
+Status_SCAS_Child,
+Status_SCAS_Preschool,
+Status_SCAS_Parent,
+Status_SCARED_Child,
+Status_SCARED_Parent,
+Status_SPIC,
+Status_TOF,
+Status_Consensus,
+Status_ARI,
+Status_DMDD,
+
+scid_bor_count,
+scid_bor_dx,
+scid_dep_ill,
+scid_psy_dx,
+scid_gad_count_core,
+scid_gad_impair,
+scid_man_ill,
+scid_ocd_impair,
+scid_pho_impair,
+scid_szt_dx,
+scid_soc_count_core,
+
+fdx,
+fcodxm_1,
+fcodxm_2 ,
+fcodxm_3,
+
+mdx,
+mcodxm_1,
+mcodxm_2,
+mcodxm_3)
+```
+
+```{r}
+FORBOW <- FORBOW_full %>% select(Subject_ID, Assessment_Date, Child_DOB_ChDem,
+oage,
+mdob,
+mage,
+fdob,
+fage, 
+Status_ALS, 
+Status_MFQ,
+Status_MFQ_P,
+Status_CBCL_Parent,
+Status_CBCL_YSR ,
+Status_SCAS_Child,
+Status_SCAS_Preschool,
+Status_SCAS_Parent,
+Status_SCARED_Child,
+Status_SCARED_Parent,
+Status_SPIC,
+Status_TOF,
+Status_Consensus,
+Status_ARI,
+Status_DMDD,
+
+scid_bor_count,
+scid_bor_dx,
+scid_dep_ill,
+scid_psy_dx,
+scid_gad_count_core,
+scid_gad_impair,
+scid_man_ill,
+scid_ocd_impair,
+scid_pho_impair,
+scid_szt_dx,
+scid_soc_count_core,
+
+fdx,
+fcodxm_1,
+fcodxm_2 ,
+fcodxm_3,
+
+mdx,
+mcodxm_1,
+mcodxm_2,
+mcodxm_3)
+```
+
+
+```{r}
+FORBOW_combined <-FORBOW %>% left_join(FORBOW_analytic, by="Subject_ID") %>% 
+  mutate(Subject_ID_Mother1 = ifelse(grepl("M",Subject_ID), Subject_ID, NA)) %>%
+  mutate(Subject_ID_Father1 = ifelse(grepl("F",Subject_ID), Subject_ID, NA)) %>%
+  
+  mutate(Subject_ID_Mother2= ifelse(is.na(Subject_ID_Mother), Subject_ID_Mother1, Subject_ID_Mother)) %>%
+  mutate(Subject_ID_Father2= ifelse(is.na(Subject_ID_Father), Subject_ID_Father1, Subject_ID_Father)) %>%
+  
+  mutate(Assessment_Date= ifelse(is.na(Assessment_Date.y), Assessment_Date.x, Assessment_Date.y)) %>%
+   
+  mutate(mdob= ifelse(is.na(mdob.y), mdob.x, mdob.y)) %>%
+  mutate(fdob= ifelse(is.na(fdob.y), fdob.x, fdob.y)) %>%
+  
+  mutate(mage= ifelse(is.na(mage.y), mage.x, mage.y)) %>%
+  mutate(fage= ifelse(is.na(fage.y), fage.x, fage.y)) %>%
+  
+  mutate(mdx= ifelse(is.na(mdx.y), mdx.x, mdx.y)) %>%
+  mutate(fdx= ifelse(is.na(fdx.y), fdx.x, fdx.y)) %>%
+  
+  mutate(mcodxm_1= ifelse(is.na(mcodxm_1.y), mcodxm_1.x, mcodxm_1.y)) %>%
+  mutate(fcodxm_1= ifelse(is.na(fcodxm_1.y), fcodxm_1.x, fcodxm_1.y)) %>%
+  
+  mutate(mcodxm_2= ifelse(is.na(mcodxm_2.y), mcodxm_2.x, mcodxm_2.y)) %>%
+  mutate(fcodxm_2= ifelse(is.na(fcodxm_2.y), fcodxm_2.x, fcodxm_2.y)) %>%
+  
+  mutate(mcodxm_3= ifelse(is.na(mcodxm_3.y), mcodxm_3.x, mcodxm_3.y)) %>%
+  mutate(fcodxm_3= ifelse(is.na(fcodxm_3.y), fcodxm_3.x, fcodxm_3.y)) %>%
+  
+  distinct(Subject_ID_Mother2, mdx, Assessment_Date, fdx, Subject_ID_Father2, .keep_all=TRUE)
+```
+
+```{r}
+forbow_mother <- FORBOW_combined %>% select(Subject_ID_Mother2, Assessment_Date, mdob,
+mage,
+mdx,
+mcodxm_1,
+mcodxm_2,
+mcodxm_3) %>% 
+  mutate(iid1= as.character(Subject_ID_Mother2)) %>%
+  mutate(iid2= as.character(Subject_ID_Mother2)) %>%
+  mutate(mdx_scz=ifelse(mdx==1, "1", "0"))%>%
+  mutate(mdx_bd=ifelse(mdx==2|mdx==3,"1","0")) %>%
+  mutate(mdx_dep=ifelse(mdx==4,"1","0")) %>%
+  mutate(mdx_disrupt=ifelse(mdx==8,"1","0")) %>%
+  mutate(mdx_anx=ifelse(mdx==5|
+        mcodxm_1==2|mcodxm_2==2|mcodxm_3==2|
+        mcodxm_1==1|mcodxm_2==1 |mcodxm_3==1|
+        mcodxm_1==3|mcodxm_2==3|mcodxm_3==3|
+        mcodxm_1==5|mcodxm_2==5 |mcodxm_3==5|
+        mcodxm_1==4|mcodxm_2==4|mcodxm_3==4|
+        mcodxm_1==6|mcodxm_2==6 |mcodxm_3==6,"1","0")) %>%
+  mutate(mdx_eatd=ifelse(mdx==6|mcodxm_1==12|mcodxm_2==12 |mcodxm_3==12|mcodxm_1==13|mcodxm_2==13 |mcodxm_3==13,"1","0")) %>%
+  mutate(mdx_sud=ifelse(mdx==7|mcodxm_1==7|mcodxm_2==7 |mcodxm_3==7|mcodxm_1==8|mcodxm_2==8 |mcodxm_3==8|mcodxm_1==9|mcodxm_2==9 |mcodxm_3==9|mcodxm_1==10|mcodxm_2==10 |mcodxm_3==10,"1","0"))%>%
+  mutate(mdx_ocd=ifelse(mcodxm_1==5|mcodxm_2==5 |mcodxm_3==5,"1","0")) %>% drop_na(Subject_ID_Mother2)
+
+
+
+forbow_mother_iid1 <- forbow_mother %>% select(iid1, Assessment_Date, mdob, mage, mdx_scz, mdx_bd, mdx_dep, mdx_disrupt, mdx_anx, mdx_eatd, mdx_sud, mdx_ocd)
+
+forbow_mother_iid2 <- forbow_mother %>% select(iid2, Assessment_Date, mdob, mage, mdx_scz, mdx_bd, mdx_dep, mdx_disrupt, mdx_anx, mdx_eatd, mdx_sud, mdx_ocd)
+```
+
+```{r}
+forbow_father<- FORBOW_combined %>% select(Subject_ID_Father2, Assessment_Date, fdob,
+fage,
+fdx,
+fcodxm_1,
+fcodxm_2,
+fcodxm_3)%>%
+  mutate(iid1= as.character(Subject_ID_Father2)) %>%
+  mutate(iid2= as.character(Subject_ID_Father2))%>%
+  mutate(fdx_scz=ifelse(fdx==1, "1", "0"))%>%
+  mutate(fdx_bd=ifelse(fdx==2|fdx==3,"1","0")) %>%
+  mutate(fdx_dep=ifelse(fdx==4,"1","0")) %>%
+  mutate(fdx_disrupt=ifelse(fdx==8,"1","0")) %>%
+  mutate(fdx_anx=ifelse(fdx==5|
+  fcodxm_1==2|fcodxm_2==2 |fcodxm_3==2|
+  fcodxm_1==1|fcodxm_2==1 |fcodxm_3==1|
+  fcodxm_1==3|fcodxm_2==3 |fcodxm_3==3|
+  fcodxm_1==5|fcodxm_2==5 |fcodxm_3==5|
+  fcodxm_1==4|fcodxm_2==4 |fcodxm_3==4|
+  fcodxm_1==6|fcodxm_2==6 |fcodxm_3==6,"1","0")) %>%
+  mutate(fdx_eatd=ifelse(fdx==6|fcodxm_1==12|fcodxm_2==12 |fcodxm_3==12|fcodxm_1==13|fcodxm_2==13 |fcodxm_3==13,"1","0")) %>%
+  mutate(fdx_sud=ifelse(fdx==7|fcodxm_1==7|fcodxm_2==7 |fcodxm_3==7|fcodxm_1==8|fcodxm_2==8 |fcodxm_3==8|fcodxm_1==9|fcodxm_2==9 |fcodxm_3==9|fcodxm_1==10|fcodxm_2==10 |fcodxm_3==10,"1","0"))%>%
+  mutate(fdx_ocd=ifelse(fcodxm_1==5|fcodxm_2==5 |fcodxm_3==5,"1","0")) %>%drop_na(Subject_ID_Father2)
+
+
+
+forbow_father_iid1 <- forbow_father %>% select(iid1, Assessment_Date, fdob, fage, fdx_scz, fdx_bd, fdx_dep, fdx_disrupt, fdx_anx, fdx_eatd, fdx_sud, fdx_ocd)
+
+forbow_father_iid2 <- forbow_father %>% select(iid2, Assessment_Date, fdob, fage, fdx_scz, fdx_bd, fdx_dep, fdx_disrupt,fdx_anx, fdx_eatd, fdx_sud, fdx_ocd) 
+
+```
+
+
+## IDEAS Match closest date assessment to first actigraph date 
+
+```{r}
+merge <- sum_pairs %>%
+  left_join(forbow_mother_iid1, by = 'iid1') 
+
+merge2 <- merge %>% left_join(forbow_mother_iid2, by = 'iid2') %>% mutate(closest_assessment1=abs((difftime(Assessment_Date.x, wakeup_date1, units = "weeks")))) %>%
+  filter(closest_assessment1<27|is.na(closest_assessment1)) %>% 
+  mutate(closest_assessment2=abs((difftime(Assessment_Date.y, wakeup_date2, units = "weeks")))) %>%
+  filter(closest_assessment2<27|is.na(closest_assessment2)) %>%
+  distinct(HID, fid, PID, wakeup_date1, wakeup_time1, wakeup_date2, event,.keep_all=TRUE)
+
+merge3 <- merge2 %>%
+  left_join(forbow_father_iid1, by = 'iid1') 
+
+merge4 <- merge3 %>% left_join(forbow_father_iid2, by = 'iid2') %>% mutate(closest_assessment1=abs((difftime(Assessment_Date.x.x, wakeup_date1, units = "weeks")))) %>%
+  filter(closest_assessment1<27|is.na(closest_assessment1)) %>% 
+  mutate(closest_assessment2=abs((difftime(Assessment_Date.y.y, wakeup_date1, units = "weeks")))) %>%
+  filter(closest_assessment2<27|is.na(closest_assessment2)) %>%
+  distinct(HID, fid, PID, wakeup_date1, wakeup_time1, wakeup_date2, event,.keep_all=TRUE) %>%
+  
+  mutate(iid1_Assessment_Date = as.POSIXct(ifelse(is.na(Assessment_Date.x), Assessment_Date.x.x, Assessment_Date.x)), Assessment_Date.x=NULL, Assessment_Date.x.x=NULL) %>%
+  mutate(iid2_Assessment_Date = as.POSIXct(ifelse(is.na(Assessment_Date.y), Assessment_Date.y.y, Assessment_Date.y)), Assessment_Date.y=NULL, Assessment_Date.y.y=NULL) %>%
+  
+  mutate(iid1_dob= as.POSIXct(ifelse(is.na(mdob.x), fdob.x, mdob.x)), mdob.x=NULL, fdob.x=NULL)%>%
+  mutate(iid2_dob= as.POSIXct(ifelse(is.na(mdob.y), fdob.y, mdob.y)), mdob.y=NULL, fdob.y=NULL) %>%
+  
+  mutate(iid1_age= ifelse(is.na(mage.x), fage.x, mage.x), mage.x=NULL, fage.x=NULL) %>%
+  mutate(iid2_age= ifelse(is.na(mage.y), fage.y, mage.y), mage.y=NULL, fage.y=NULL) %>%
+  
+  mutate(iid1_dx_scz= ifelse(is.na(mdx_scz.x), fdx_scz.x, mdx_scz.x), mdx_scz.x=NULL, fdx_scz.x=NULL) %>%
+  mutate(iid2_dx_scz= ifelse(is.na(mdx_scz.y), fdx_scz.y, mdx_scz.y), mdx_scz.y=NULL, fdx_scz.y=NULL) %>%
+  
+  mutate(iid1_dx_bd= ifelse(is.na(mdx_bd.x), fdx_bd.x, mdx_bd.x), mdx_bd.x=NULL, fdx_bd.x=NULL) %>%
+  mutate(iid2_dx_bd= ifelse(is.na(mdx_bd.y), fdx_bd.y, mdx_bd.y), mdx_bd.y=NULL, fdx_bd.y=NULL) %>%
+  
+  mutate(iid1_dx_dep= ifelse(is.na(mdx_dep.x), fdx_dep.x, mdx_dep.x), mdx_dep.x=NULL, fdx_dep.x=NULL) %>%
+  mutate(iid2_dx_dep= ifelse(is.na(mdx_dep.y), fdx_dep.y, mdx_dep.y), mdx_dep.y=NULL, fdx_dep.y=NULL) %>%
+  
+  mutate(iid1_dx_disrupt= ifelse(is.na(mdx_disrupt.x), fdx_disrupt.x, mdx_disrupt.x), mdx_disrupt.x=NULL, fdx_disrupt.x=NULL) %>%
+  mutate(iid2_dx_disrupt= ifelse(is.na(mdx_disrupt.y), fdx_disrupt.y, mdx_disrupt.y), mdx_disrupt.y=NULL, fdx_disrupt.y=NULL) %>%
+  
+  mutate(iid1_dx_anx= ifelse(is.na(mdx_anx.x), fdx_anx.x, mdx_anx.x), mdx_anx.x=NULL, fdx_anx.x=NULL) %>%
+  mutate(iid2_dx_anx= ifelse(is.na(mdx_anx.y), fdx_anx.y, mdx_anx.y), mdx_anx.y=NULL, fdx_anx.y=NULL) %>%
+  
+  mutate(iid1_dx_sud= ifelse(is.na(mdx_sud.x), fdx_sud.x, mdx_sud.x), mdx_sud.x=NULL, fdx_sud.x=NULL) %>%
+  mutate(iid2_dx_sud= ifelse(is.na(mdx_sud.y), fdx_sud.y, mdx_sud.y), mdx_sud.y=NULL, fdx_sud.y=NULL) %>%
+  
+  mutate(iid1_dx_eatd= ifelse(is.na(mdx_eatd.x), fdx_eatd.x, mdx_eatd.x), mdx_eatd.x=NULL, fdx_eatd.x=NULL) %>%
+  mutate(iid2_dx_eatd= ifelse(is.na(mdx_eatd.y), fdx_eatd.y, mdx_eatd.y), mdx_eatd.y=NULL, fdx_eatd.y=NULL) %>%
+  mutate(iid1_dx_ocd= ifelse(is.na(mdx_ocd.x), fdx_ocd.x, mdx_ocd.x), mdx_ocd.x=NULL, fdx_ocd.x=NULL) %>%
+  mutate(iid2_dx_ocd= ifelse(is.na(mdx_ocd.y), fdx_ocd.y, mdx_ocd.y), mdx_ocd.y=NULL, fdx_ocd.y=NULL) %>%      relocate(iid1_Assessment_Date, iid2_Assessment_Date, iid1_dob, iid2_dob, iid1_age, iid2_age, .before = event) 
+```
+
+```{r}
+forbow_offspring <- FORBOW_analytic_full %>% select(Subject_ID, Assessment_Date, DOB,
+age,
+sex,
+clMDD,
+clDEP,
+clBPD,
+clSCHZ,
+clANX,
+clSUD,
+clDisrupt,
+clED,
+clOCD,
+antanx,
+antafflab,
+antpsych,
+antbs,
+antdep) %>%
+  mutate(iid1= Subject_ID) %>%
+  mutate(iid2= Subject_ID) %>%
+  mutate(odx_scz=ifelse(clSCHZ==1|antbs==1|antpsych==1, "1", "0"))%>%
+  mutate(odx_bd=ifelse(clBPD==1|antafflab==1,"1","0")) %>%
+  mutate(odx_dep=ifelse(clMDD==1|clDEP==1|antdep==1,"1","0")) %>%
+  mutate(odx_anx=ifelse(clANX==1|antanx==1,"1","0")) %>%  
+  mutate(odx_sud=ifelse(clSUD==1,"1","0")) %>%
+  mutate(odx_eatd=ifelse(clED==1,"1","0")) %>%
+  mutate(odx_ocd=ifelse(clOCD==1,"1","0")) %>%
+  mutate(odx_disrupt=ifelse(clDisrupt==1,"1","0"))
+  
+
+
+
+forbow_offspring_iid1 <- forbow_offspring %>% select(iid1, Assessment_Date, DOB, age, sex, odx_scz, odx_bd, odx_dep, odx_anx, odx_eatd, odx_sud, odx_ocd, odx_disrupt)
+
+forbow_offspring_iid2 <- forbow_offspring %>% select(iid2, Assessment_Date, DOB, age, sex, odx_scz, odx_bd, odx_dep, odx_anx, odx_eatd, odx_sud, odx_ocd, odx_disrupt) 
+```
+
+```{r}
+merge5 <- merge4 %>%
+  left_join(forbow_offspring_iid1, by = 'iid1') 
+
+merge6 <- merge5 %>% left_join(forbow_offspring_iid2, by = 'iid2')%>%
+  
+  mutate(closest_assessment1o=abs((difftime(Assessment_Date.x, wakeup_date1, units = "weeks")))) %>%
+  filter(closest_assessment1o<27|is.na(closest_assessment1o)) %>% 
+  
+  mutate(closest_assessment2o=abs((difftime(Assessment_Date.y, wakeup_date2, units = "weeks")))) %>%
+  filter(closest_assessment2o<27|is.na(closest_assessment2o)) %>%
+  
+  distinct(HID, fid, PID, wakeup_date1, wakeup_time1, wakeup_date2, event,.keep_all=TRUE) %>%
+  
+mutate(iid1_Assessment_Date = as.POSIXct(ifelse(is.na(iid1_Assessment_Date), Assessment_Date.x, iid1_Assessment_Date)), Assessment_Date.x=NULL) %>%
+mutate(iid2_Assessment_Date = as.POSIXct(ifelse(is.na(iid2_Assessment_Date), Assessment_Date.y, iid2_Assessment_Date)), Assessment_Date.y=NULL) %>%
+  
+  mutate(iid1_dob= as.POSIXct(ifelse(is.na(iid1_dob), DOB.x, iid1_dob))) %>%
+  mutate(iid2_dob= as.POSIXct(ifelse(is.na(iid2_dob), DOB.y, iid2_dob))) %>%
+  
+  mutate(iid1_age= ifelse(is.na(iid1_age), age.x, iid1_age), age.x=NULL) %>%
+  mutate(iid2_age= ifelse(is.na(iid2_age), age.y, iid2_age), age.y=NULL) %>%
+  
+  mutate(iid1_dx_scz= ifelse(is.na(iid1_dx_scz), odx_scz.x, iid1_dx_scz), odx_scz.x=NULL) %>%
+  mutate(iid2_dx_scz= ifelse(is.na(iid2_dx_scz), odx_scz.y, iid2_dx_scz), odx_scz.y=NULL) %>%
+  
+  mutate(iid1_dx_bd= ifelse(is.na(iid1_dx_bd), odx_bd.x, iid1_dx_bd), odx_bd.x=NULL) %>%
+  mutate(iid2_dx_bd= ifelse(is.na(iid2_dx_bd), odx_bd.y, iid2_dx_bd), odx_bd.y=NULL) %>%
+  
+  mutate(iid1_dx_dep= ifelse(is.na(iid1_dx_dep), odx_dep.x, iid1_dx_dep), odx_dep.x=NULL) %>%
+  mutate(iid2_dx_dep= ifelse(is.na(iid2_dx_dep), odx_dep.y, iid2_dx_dep), odx_dep.y=NULL) %>%
+  
+  mutate(iid1_dx_disrupt= ifelse(is.na(iid1_dx_disrupt), odx_disrupt.x, iid1_dx_disrupt), odx_disrupt.x=NULL) %>%
+  mutate(iid2_dx_disrupt= ifelse(is.na(iid2_dx_disrupt), odx_disrupt.y, iid2_dx_disrupt), odx_disrupt.y=NULL) %>%
+  
+  mutate(iid1_dx_anx= ifelse(is.na(iid1_dx_anx), odx_anx.x, iid1_dx_anx), odx_anx.x=NULL) %>%
+  mutate(iid2_dx_anx= ifelse(is.na(iid2_dx_anx), odx_anx.y, iid2_dx_anx), odx_anx.y=NULL) %>%
+  
+  mutate(iid1_dx_sud= ifelse(is.na(iid1_dx_sud), odx_sud.x, iid1_dx_sud), odx_sud.x=NULL) %>%
+  mutate(iid2_dx_sud= ifelse(is.na(iid2_dx_sud), odx_sud.y, iid2_dx_sud), odx_sud.y=NULL) %>%
+  
+  mutate(iid1_dx_eatd= ifelse(is.na(iid1_dx_eatd), odx_eatd.x, iid1_dx_eatd), odx_eatd.x=NULL) %>%
+  mutate(iid2_dx_eatd= ifelse(is.na(iid2_dx_eatd), odx_eatd.y, iid2_dx_eatd), odx_eatd.y=NULL) %>%
+  
+  mutate(iid1_dx_ocd= ifelse(is.na(iid1_dx_ocd), odx_ocd.x, iid1_dx_ocd), 
+odx_ocd.x=NULL) %>%
+  mutate(iid2_dx_ocd= ifelse(is.na(iid2_dx_ocd), odx_ocd.y, iid2_dx_ocd), odx_ocd.y=NULL) %>%     
+  
+    mutate(closest_assessment1= ifelse(is.na(closest_assessment1), closest_assessment1o, closest_assessment1), 
+closest_assessment1o=NULL) %>%
+  mutate(closest_assessment2= ifelse(is.na(closest_assessment2), closest_assessment2o, closest_assessment2), closest_assessment2o=NULL) %>% 
+  
+  mutate(iid1_sex= sex.x, sex.x=NULL) %>%
+  mutate(iid2_sex= sex.y, sex.y=NULL) %>% 
+  
+  mutate(iid1_sex= ifelse(grepl("F",iid1), "0", iid1_sex)) %>%
+  mutate(iid1_sex= ifelse(grepl("M",iid1), "1", iid1_sex)) %>%
+  mutate(iid2_sex= ifelse(grepl("F",iid2), "0", iid2_sex)) %>%
+  mutate(iid2_sex= ifelse(grepl("M",iid2), "1", iid2_sex)) %>%  
+  
+  relocate(iid1_sex, iid2_sex,iid1_Assessment_Date, iid2_Assessment_Date, closest_assessment1, closest_assessment2, iid1_dob, iid2_dob, iid1_age, iid2_age, .before = event) 
+```
+
+```{r}
+pairwise <- merge6 %>%
+  mutate(sex_pair=ifelse(iid1_sex==iid2_sex, 1, 0)) %>%
+  mutate(scz_pair=ifelse(iid1_dx_scz==iid2_dx_scz, 1, 0)) %>%
+  mutate(bd_pair=ifelse(iid1_dx_bd==iid2_dx_bd, 1, 0)) %>%
+  mutate(dep_pair=ifelse(iid1_dx_dep==iid2_dx_dep, 1, 0)) %>%
+  mutate(anx_pair=ifelse(iid1_dx_anx==iid2_dx_anx, 1, 0)) %>%
+  mutate(ocd_pair=ifelse(iid1_dx_ocd==iid2_dx_ocd, 1, 0)) %>%
+  mutate(disrupt_pair=ifelse(iid1_dx_disrupt==iid2_dx_disrupt, 1, 0)) %>%
+  mutate(eatd_pair=ifelse(iid1_dx_eatd==iid2_dx_eatd, 1, 0)) %>%
+  mutate(sud_pair=ifelse(iid1_dx_sud==iid2_dx_sud, 1, 0)) %>%
+  mutate(age_pair=iid2_age-iid1_age) %>% 
+  select(-HID, -fid, -MID1, -MID2, -iid1_sex, -iid2_sex, -closest_assessment1, -closest_assessment2, -iid1_dob, -iid2_dob, -iid1_age, -iid2_age, -iid1_dx_scz, -iid1_dx_bd, -iid1_dx_dep, -iid1_dx_disrupt, -iid1_dx_eatd, -iid1_dx_sud, -iid1_dx_ocd, -iid1_dx_anx, -iid2_dx_scz, -iid2_dx_bd, -iid2_dx_dep, -iid2_dx_disrupt, -iid2_dx_eatd, -iid2_dx_sud, -iid2_dx_ocd, -iid2_dx_anx, -DOB.x, -DOB.y) %>%
+  relocate(sex_pair, age_pair, .before=iid1_Assessment_Date) %>%
+  mutate(PID=ifelse(iid1=="8000019M1", gsub("m1", "m2", PID), PID)) %>%
+  mutate(PID=ifelse(iid2=="8000019M1",gsub("m1", "m2", PID), PID))%>%
+  mutate(iid1=ifelse(iid1=="8000019M1", "8000019M2", iid1)) %>%
+  mutate(iid2=ifelse(iid2=="8000019M1", "8000019M2", iid2)) %>% filter(PID!="m2_m2")
+```
+
